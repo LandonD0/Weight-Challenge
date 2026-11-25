@@ -67,11 +67,11 @@ canvas{width:100%;max-height:350px}
 <h3>Daily Log</h3>
 <label>Date</label>
 <input type="date" id="date">
-<label>Current weight (lbs)</label>
+<label>Current weight (lbs) — required</label>
 <input type="number" id="weight" step="0.1" placeholder="Enter weight">
-<label>Mile minutes</label>
+<label>Mile minutes — optional</label>
 <input type="number" id="minutes" min="0" placeholder="7">
-<label>Mile seconds</label>
+<label>Mile seconds — optional</label>
 <input type="number" id="seconds" min="0" max="59" placeholder="30">
 <button onclick="saveEntry()">Save Entry</button>
 </div>
@@ -203,24 +203,42 @@ function saveEntry(){
  let weight=document.getElementById("weight").value;
  let minutes=document.getElementById("minutes").value;
  let seconds=document.getElementById("seconds").value;
- if(!date||weight===""||minutes===""||seconds===""){
-  alert("Complete all fields.");
+ if(!date||weight===""){
+  alert("Date and weight are required.");
   return;
  }
  weight=Number(weight);
- minutes=Number(minutes);
- seconds=Number(seconds);
- if(weight<=0||minutes<0||seconds<0||seconds>59||
- !Number.isInteger(minutes)||!Number.isInteger(seconds)){
-  alert("Enter valid measurements and mile time.");
+ if(weight<=0){
+  alert("Enter a valid weight.");
   return;
+ }
+ let hasMinutes=minutes!=="";
+ let hasSeconds=seconds!=="";
+ let mileTime=null;
+ if(hasMinutes||hasSeconds){
+  if(!hasMinutes||!hasSeconds){
+   alert("Enter both mile minutes and mile seconds, or leave both blank.");
+   return;
+  }
+  minutes=Number(minutes);
+  seconds=Number(seconds);
+  if(minutes<0||seconds<0||seconds>59||
+  !Number.isInteger(minutes)||!Number.isInteger(seconds)){
+   alert("Enter a valid mile time.");
+   return;
+  }
+  mileTime=minutes*60+seconds;
+ } else {
+  minutes=null;
+  seconds=null;
  }
  p.entries=p.entries.filter(e=>e.date!==date);
  p.entries.push({
   date,
   weight,
   minutes,
-  seconds
+  seconds,
+  mileTime
  });
  p.entries.sort((a,b)=>a.date.localeCompare(b.date));
  save();
@@ -240,7 +258,7 @@ function renderProfile(){
  percent.toFixed(1)+"%";
  document.getElementById("progressBar").style.width=
  Math.max(0,Math.min(100,percent))+"%";
- document.getElementById("mile").textContent=latest?
+ document.getElementById("mile").textContent=latest&&latest.minutes!==null&&latest.seconds!==null?
  latest.minutes+":"+String(latest.seconds).padStart(2,"0"):"--:--";
  renderHistory(entries);
  renderChart(entries);
@@ -256,7 +274,7 @@ function renderHistory(entries){
   <div>
    <strong>${e.date}</strong><br>
    <span class="blue">${calculate(data.people[active],e.weight).toFixed(1)}% goal progress</span><br>
-   <span class="orange">Mile: ${e.minutes}:${String(e.seconds).padStart(2,"0")}</span>
+   <span class="orange">Mile: ${e.minutes!==null&&e.seconds!==null?e.minutes+":"+String(e.seconds).padStart(2,"0"):"Not recorded"}</span>
   </div>
   <button class="secondary" onclick="deleteEntry('${e.date}')">Delete</button>
  </div>
@@ -279,11 +297,12 @@ function renderChart(entries){
     },
     {
      label:"Mile Time",
-     data:entries.map(e=>e.minutes*60+e.seconds),
+     data:entries.map(e=>e.mileTime!==undefined&&e.mileTime!==null?e.mileTime:(e.minutes!==null&&e.seconds!==null?e.minutes*60+e.seconds:null)),
      borderColor:"#ff9d45",
      backgroundColor:"#ff9d4522",
      yAxisID:"y1",
-     tension:.3
+     tension:.3,
+     spanGaps:true
     }
    ]
   },
