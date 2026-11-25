@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101010">
+<title>9 Month Challenge</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101010;color:white;font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif;padding:20px}
+header{text-align:center;padding:20px 0}
+header h1{font-size:27px;margin-bottom:5px}
+.muted{color:#888;font-size:13px}
+.card{background:#1d1d1d;border:1px solid #303030;border-radius:17px;padding:18px;margin-bottom:16px}
+h2{font-size:18px;margin-top:0}
+.progress{background:#333;height:9px;border-radius:20px;overflow:hidden;margin:12px 0}
+.bar{height:100%;background:#e5e5e5;width:0%;transition:width .3s}
+button{background:white;color:black;border:none;border-radius:10px;padding:13px;font-weight:bold;cursor:pointer}
+button:disabled{background:#555;color:#aaa}
+.full{width:100%}
+input{background:#292929;color:white;border:1px solid #444;border-radius:9px;padding:12px;width:100%;margin:7px 0 12px;font-size:15px}
+.tabs{display:flex;gap:8px;margin-bottom:17px}
+.tabs button{flex:1;background:#292929;color:white}
+.tabs button.active{background:white;color:black}
+.stat{font-size:29px;font-weight:bold}
+.person{margin-bottom:20px}
+.history-row{border-top:1px solid #333;padding:12px 0;font-size:13px}
+.hidden{display:none}
+.habit{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #333}
+.habit input{width:20px;height:20px;margin:0}
+footer{text-align:center;color:#666;font-size:11px;padding:20px}
+</style>
+</head>
+<body>
+<header>
+<h1>THE 9 MONTH CHALLENGE</h1>
+<div class="muted">November 25, 2026 — August 25, 2027</div>
+</header>
+<div class="card">
+<div class="muted">TIME REMAINING</div>
+<div class="stat" id="countdown">273 DAYS</div>
+<div class="muted" id="today"></div>
+</div>
+<div class="tabs">
+<button class="active" onclick="showTab('home',this)">Home</button>
+<button onclick="showTab('checkin',this)">Check-in</button>
+<button onclick="showTab('history',this)">History</button>
+<button onclick="showTab('settings',this)">Settings</button>
+</div>
+<section id="home">
+<div class="card">
+<h2>Challenge Leaderboard</h2>
+<div class="person">
+<b id="name1">You</b>
+<div class="progress"><div class="bar" id="bar1"></div></div>
+<span id="percent1">0%</span>
+<span class="muted"> habit consistency</span>
+</div>
+<div class="person">
+<b id="name2">Dad</b>
+<div class="progress"><div class="bar" id="bar2"></div></div>
+<span id="percent2">0%</span>
+<span class="muted"> habit consistency</span>
+</div>
+</div>
+<div class="card">
+<h2>Today's Status</h2>
+<p id="status1" class="muted">Your check-in is incomplete.</p>
+<p id="status2" class="muted">Dad's check-in is incomplete.</p>
+<button class="full" onclick="showTab('checkin',document.querySelectorAll('.tabs button')[1])">COMPLETE DAILY CHECK-IN</button>
+</div>
+<div class="card">
+<h2>Challenge Rules</h2>
+<p class="muted">Stay consistent. Build healthy habits. Support each other. Make progress every day.</p>
+</div>
+</section>
+<section id="checkin" class="hidden">
+<div class="card">
+<h2 id="checkinTitle">Daily Check-in</h2>
+<div class="muted" id="checkinDate"></div>
+<div class="tabs">
+<button class="active" onclick="selectPerson(0,this)">You</button>
+<button onclick="selectPerson(1,this)">Dad</button>
+</div>
+<div id="habitList"></div>
+<input id="notes" placeholder="Daily notes (optional)">
+<button class="full" onclick="saveCheckin()">SAVE CHECK-IN</button>
+<p class="muted" id="saveMessage"></p>
+</div>
+</section>
+<section id="history" class="hidden">
+<div class="card">
+<h2>Daily History</h2>
+<div id="historyList"></div>
+</div>
+</section>
+<section id="settings" class="hidden">
+<div class="card">
+<h2>Challenge Settings</h2>
+<label class="muted">Your name</label>
+<input id="settingName1">
+<label class="muted">Dad's name</label>
+<input id="settingName2">
+<button class="full" onclick="saveSettings()">SAVE SETTINGS</button>
+</div>
+<div class="card">
+<h2>Your Healthy Habits</h2>
+<p class="muted">These measure consistency, not weight or body size.</p>
+<div id="habitSettings"></div>
+</div>
+<div class="card">
+<h2>Data</h2>
+<button class="full" onclick="exportData()">EXPORT CHALLENGE DATA</button>
+</div>
+</section>
+<footer>THE 9 MONTH CHALLENGE • 2026–2027</footer>
+<script>
+const END="2027-08-25";
+const defaultData={
+names:["You","Dad"],
+habits:[
+["Follow my healthy routine","Get enough sleep","Stay hydrated"],
+["Follow my healthy routine","Stay active","Get enough sleep"]
+],
+records:{}
+};
+let data=JSON.parse(localStorage.getItem("challengeData")||"null")||defaultData;
+let selectedPerson=0;
+let selectedHabits=[];
+function saveData(){
+localStorage.setItem("challengeData",JSON.stringify(data));
+}
+function dateKey(){
+const d=new Date();
+return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function getRecord(date,person){
+return data.records[date]?.[person];
+}
+function calculateProgress(person){
+const records=Object.values(data.records);
+let total=0,completed=0;
+records.forEach(day=>{
+const r=day[person];
+if(r){
+total+=r.habits.length;
+completed+=r.habits.filter(Boolean).length;
+}
+});
+return total?Math.round(completed/total*100):0;
+}
+function updateDashboard(){
+document.getElementById("name1").textContent=data.names[0];
+document.getElementById("name2").textContent=data.names[1];
+for(let i=0;i<2;i++){
+const p=calculateProgress(i);
+document.getElementById("percent"+(i+1)).textContent=p+"%";
+document.getElementById("bar"+(i+1)).style.width=p+"%";
+}
+const todayRecord=data.records[dateKey()]||{};
+for(let i=0;i<2;i++){
+document.getElementById("status"+(i+1)).textContent=
+data.names[i]+": "+(todayRecord[i]?"Check-in completed ✓":"Check-in pending");
+}
+}
+function updateCountdown(){
+const now=new Date();
+const end=new Date(END+"T23:59:59");
+const days=Math.max(0,Math.ceil((end-now)/86400000));
+document.getElementById("countdown").textContent=days+" DAYS";
+document.getElementById("today").textContent=now.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
+}
+function showTab(tab,button){
+["home","checkin","history","settings"].forEach(id=>document.getElementById(id).classList.add("hidden"));
+document.getElementById(tab).classList.remove("hidden");
+document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
+if(button)button.classList.add("active");
+if(tab==="checkin")renderCheckin();
+if(tab==="history")renderHistory();
+if(tab==="settings")renderSettings();
+}
+function selectPerson(person,button){
+selectedPerson=person;
+document.querySelectorAll("#checkin .tabs button").forEach(b=>b.classList.remove("active"));
+button.classList.add("active");
+renderCheckin();
+}
+function renderCheckin(){
+document.getElementById("checkinTitle").textContent=data.names[selectedPerson]+"'s Check-in";
+document.getElementById("checkinDate").textContent=new Date().toDateString();
+const existing=getRecord(dateKey(),selectedPerson);
+selectedHabits=existing?[...existing.habits]:data.habits[selectedPerson].map(()=>false);
+document.getElementById("notes").value=existing?.notes||"";
+const list=document.getElementById("habitList");
+list.innerHTML="";
+data.habits[selectedPerson].forEach((habit,index)=>{
+const div=document.createElement("label");
+div.className="habit";
+const check=document.createElement("input");
+check.type="checkbox";
+check.checked=!!selectedHabits[index];
+check.onchange=()=>selectedHabits[index]=check.checked;
+const span=document.createElement("span");
+span.textContent=habit;
+div.append(check,span);
+list.append(div);
+});
+}
+function saveCheckin(){
+const date=dateKey();
+if(!data.records[date])data.records[date]={};
+data.records[date][selectedPerson]={
+habits:[...selectedHabits],
+notes:document.getElementById("notes").value
+};
+saveData();
+updateDashboard();
+document.getElementById("saveMessage").textContent="Check-in saved successfully ✓";
+}
+function renderHistory(){
+const list=document.getElementById("historyList");
+list.innerHTML="";
+const dates=Object.keys(data.records).sort().reverse();
+if(!dates.length){list.textContent="No check-ins yet.";return;}
+dates.forEach(date=>{
+const div=document.createElement("div");
+div.className="history-row";
+const title=document.createElement("b");
+title.textContent=date;
+div.append(title,document.createElement("br"));
+for(let i=0;i<2;i++){
+const r=data.records[date][i];
+if(r){
+const line=document.createElement("div");
+line.textContent=data.names[i]+": "+r.habits.filter(Boolean).length+"/"+r.habits.length+" habits completed";
+div.append(line);
+}
+}
+list.append(div);
+});
+}
+function renderSettings(){
+document.getElementById("settingName1").value=data.names[0];
+document.getElementById("settingName2").value=data.names[1];
+const container=document.getElementById("habitSettings");
+container.innerHTML="";
+for(let i=0;i<2;i++){
+const heading=document.createElement("h3");
+heading.textContent=data.names[i];
+container.append(heading);
+data.habits[i].forEach((habit,j)=>{
+const input=document.createElement("input");
+input.value=habit;
+input.addEventListener("change",()=>{
+data.habits[i][j]=input.value;
+saveData();
+});
+container.append(input);
+});
+}
+}
+function saveSettings(){
+data.names[0]=document.getElementById("settingName1").value||"You";
+data.names[1]=document.getElementById("settingName2").value||"Dad";
+saveData();
+updateDashboard();
+renderSettings();
+}
+function exportData(){
+const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+const url=URL.createObjectURL(blob);
+const a=document.createElement("a");
+a.href=url;
+a.download="challenge-data.json";
+a.click();
+URL.revokeObjectURL(url);
+}
+updateCountdown();
+updateDashboard();
+</script>
+</body>
+</html>
