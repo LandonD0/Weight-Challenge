@@ -97,10 +97,18 @@ footer{text-align:center;color:#666;font-size:11px;padding:20px}
 <section id="settings" class="hidden">
 <div class="card">
 <h2>Challenge Settings</h2>
-<label class="muted">Your name</label>
+<label class="muted" for="settingName1">Your name</label>
 <input id="settingName1">
-<label class="muted">Dad's name</label>
+<label class="muted" for="settingStartWeight1">Your starting weight (lb)</label>
+<input id="settingStartWeight1" type="number" min="0" step="0.1" placeholder="e.g. 180">
+<label class="muted" for="settingGoalWeight1">Your goal weight (lb)</label>
+<input id="settingGoalWeight1" type="number" min="0" step="0.1" placeholder="e.g. 160">
+<label class="muted" for="settingName2">Dad's name</label>
 <input id="settingName2">
+<label class="muted" for="settingStartWeight2">Dad's starting weight (lb)</label>
+<input id="settingStartWeight2" type="number" min="0" step="0.1" placeholder="e.g. 200">
+<label class="muted" for="settingGoalWeight2">Dad's goal weight (lb)</label>
+<input id="settingGoalWeight2" type="number" min="0" step="0.1" placeholder="e.g. 180">
 <button class="full" onclick="saveSettings()">SAVE SETTINGS</button>
 </div>
 <div class="card">
@@ -118,6 +126,8 @@ footer{text-align:center;color:#666;font-size:11px;padding:20px}
 const END="2027-08-25";
 const defaultData={
 names:["You","Dad"],
+startWeights:[null,null],
+goalWeights:[null,null],
 habits:[
 ["Follow my healthy routine","Get enough sleep","Stay hydrated"],
 ["Follow my healthy routine","Stay active","Get enough sleep"]
@@ -125,6 +135,9 @@ habits:[
 records:{}
 };
 let data=JSON.parse(localStorage.getItem("challengeData")||"null")||defaultData;
+// Add the new weight fields for people with data saved by an older version.
+data.startWeights=data.startWeights||[null,null];
+data.goalWeights=data.goalWeights||[null,null];
 let selectedPerson=0;
 let selectedHabits=[];
 function saveData(){
@@ -242,6 +255,10 @@ list.append(div);
 function renderSettings(){
 document.getElementById("settingName1").value=data.names[0];
 document.getElementById("settingName2").value=data.names[1];
+for(let i=0;i<2;i++){
+document.getElementById("settingStartWeight"+(i+1)).value=data.startWeights[i]??"";
+document.getElementById("settingGoalWeight"+(i+1)).value=data.goalWeights[i]??"";
+}
 const container=document.getElementById("habitSettings");
 container.innerHTML="";
 for(let i=0;i<2;i++){
@@ -259,9 +276,19 @@ container.append(input);
 });
 }
 }
+function readWeightInput(id){
+const value=document.getElementById(id).value.trim();
+if(value==="")return null;
+const weight=Number(value);
+return Number.isFinite(weight)&&weight>=0?weight:null;
+}
 function saveSettings(){
 data.names[0]=document.getElementById("settingName1").value||"You";
 data.names[1]=document.getElementById("settingName2").value||"Dad";
+for(let i=0;i<2;i++){
+data.startWeights[i]=readWeightInput("settingStartWeight"+(i+1));
+data.goalWeights[i]=readWeightInput("settingGoalWeight"+(i+1));
+}
 saveData();
 updateDashboard();
 renderSettings();
