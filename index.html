@@ -26,8 +26,22 @@ label{font-size:13px;color:#aebbd0}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .hidden{display:none}
 .entry{background:#252f40;padding:13px;border-radius:8px;margin:8px 0;display:flex;justify-content:space-between;align-items:center;gap:10px}
-canvas{width:100%;max-height:350px}
-@media(max-width:500px){.people{grid-template-columns:1fr}}
+.chart-card{padding:18px 20px 12px}
+.chart-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px}
+.chart-header h3{margin:0}
+.chart-header .small{margin:7px 0 0}
+.expand-button{width:42px;height:42px;padding:0;background:#252f40;color:#dbe5f5;border:1px solid #39465b;border-radius:9px;font-size:20px;flex:0 0 auto}
+.expand-button:hover{background:#303d50}
+.chart-wrap{position:relative;width:100%;height:350px;margin-top:10px}
+.chart-wrap canvas{width:100%!important;height:100%!important}
+.chart-modal{position:fixed;inset:0;z-index:1000;background:rgba(7,10,16,.94);padding:22px}
+.chart-modal[hidden]{display:none}
+.modal-card{height:100%;max-width:1500px;margin:auto;background:#1b2230;border:1px solid #303b4d;border-radius:16px;padding:18px 18px 10px;display:flex;flex-direction:column}
+.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.modal-header h2{margin:0;font-size:20px}
+.modal-chart{flex:1;min-height:0;position:relative}
+.modal-chart canvas{width:100%!important;height:100%!important}
+@media(max-width:500px){.people{grid-template-columns:1fr}.chart-card{padding:15px 12px 8px}.chart-wrap{height:300px}.chart-modal{padding:8px}.modal-card{padding:12px 8px 6px}}
 </style>
 </head>
 <body>
@@ -75,14 +89,15 @@ canvas{width:100%;max-height:350px}
 <input type="number" id="seconds" min="0" max="59" placeholder="30">
 <button onclick="saveEntry()">Save Entry</button>
 </div>
-<div class="card">
+<div class="card chart-card">
+<div class="chart-header">
+<div>
 <h3>Progress Graph</h3>
-<p class="small">
-<span class="blue">● Blue: Goal percentage (left)</span><br>
-<span class="orange">● Orange: Mile time (right)</span><br>
-Dates along the bottom
-</p>
-<canvas id="chart"></canvas>
+<p class="small"><span class="blue">● Blue: Goal %</span> &nbsp; <span class="orange">● Orange: Mile time</span></p>
+</div>
+<button class="expand-button" id="expandChart" type="button" title="View graph full screen" aria-label="View graph full screen">⛶</button>
+</div>
+<div class="chart-wrap"><canvas id="chart"></canvas></div>
 </div>
 <div class="card">
 <h3>History</h3>
@@ -99,6 +114,15 @@ Dates along the bottom
 </div>
 </div>
 </div>
+<div class="chart-modal" id="chartModal" role="dialog" aria-modal="true" aria-label="Progress graph" hidden>
+<div class="modal-card">
+<div class="modal-header">
+<h2 id="modalTitle">Progress Graph</h2>
+<button class="secondary" id="closeChart" type="button">Close ✕</button>
+</div>
+<div class="modal-chart"><canvas id="fullscreenChart"></canvas></div>
+</div>
+</div>
 <script>
 const KEY="simple-progress-tracker";
 let data=JSON.parse(localStorage.getItem(KEY))||{
@@ -110,245 +134,28 @@ let data=JSON.parse(localStorage.getItem(KEY))||{
 };
 let active=0;
 let chart=null;
-function save(){
- localStorage.setItem(KEY,JSON.stringify(data));
-}
-function endDate(){
- let d=new Date(data.start+"T12:00:00");
- d.setMonth(d.getMonth()+9);
- return d;
-}
-function updateCountdown(){
- let remaining=endDate()-new Date();
- let days=Math.max(0,Math.ceil(remaining/86400000));
- document.getElementById("countdown").textContent=
- remaining<=0?"CHALLENGE COMPLETE":days+" DAYS";
- document.getElementById("endDate").textContent=
- "Ends "+endDate().toLocaleDateString();
-}
-function escapeHTML(s){
- return String(s).replace(/[&<>"']/g,c=>({
-  "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
- })[c]);
-}
-function calculate(p,w){
- if(p.startWeight===null||p.goalWeight===null||
- p.startWeight===p.goalWeight)return 0;
- return ((p.startWeight-w)/
- (p.startWeight-p.goalWeight))*100;
-}
-function renderHome(){
- let el=document.getElementById("people");
- el.innerHTML="";
- data.people.forEach((p,i)=>{
-  let latest=p.entries[p.entries.length-1];
-  let percent=latest?calculate(p,latest.weight):0;
-  el.innerHTML+=`
-  <div class="card">
-   <h2>${escapeHTML(p.name)}</h2>
-   <div class="stat blue">${p.startWeight===null?"Setup needed":percent.toFixed(1)+"%"}</div>
-   <p class="small">Goal progress</p>
-   <div class="progress">
-    <div style="width:${Math.max(0,Math.min(100,percent))}%"></div>
-   </div>
-   <button onclick="openProfile(${i})">Open Profile</button>
-  </div>`;
- });
-}
-function openProfile(i){
- active=i;
- document.getElementById("home").classList.add("hidden");
- document.getElementById("profile").classList.remove("hidden");
- let p=data.people[i];
- document.getElementById("personName").textContent=p.name;
- document.getElementById("startWeight").value=p.startWeight??"";
- document.getElementById("goalWeight").value=p.goalWeight??"";
- document.getElementById("date").value=new Date().toISOString().slice(0,10);
- renderProfile();
-}
-function home(){
- if(chart){chart.destroy();chart=null;}
- document.getElementById("profile").classList.add("hidden");
- document.getElementById("home").classList.remove("hidden");
- renderHome();
-}
-function saveSettings(){
- let p=data.people[active];
- let start=document.getElementById("startWeight").value;
- let goal=document.getElementById("goalWeight").value;
- if(start===""||goal===""){
-  alert("Enter both starting and goal weights.");
-  return;
- }
- start=Number(start);
- goal=Number(goal);
- if(start<=0||goal<=0||start===goal){
-  alert("Enter two different positive weights.");
-  return;
- }
- p.startWeight=start;
- p.goalWeight=goal;
- save();
- renderProfile();
- renderHome();
- alert("Settings saved!");
-}
-function saveEntry(){
- let p=data.people[active];
- if(p.startWeight===null||p.goalWeight===null){
-  alert("Set your starting and goal weights in Settings first.");
-  return;
- }
- let date=document.getElementById("date").value;
- let weight=document.getElementById("weight").value;
- let minutes=document.getElementById("minutes").value;
- let seconds=document.getElementById("seconds").value;
- if(!date||weight===""){
-  alert("Date and weight are required.");
-  return;
- }
- weight=Number(weight);
- if(weight<=0){
-  alert("Enter a valid weight.");
-  return;
- }
- let hasMinutes=minutes!=="";
- let hasSeconds=seconds!=="";
- let mileTime=null;
- if(hasMinutes||hasSeconds){
-  if(!hasMinutes||!hasSeconds){
-   alert("Enter both mile minutes and mile seconds, or leave both blank.");
-   return;
-  }
-  minutes=Number(minutes);
-  seconds=Number(seconds);
-  if(minutes<0||seconds<0||seconds>59||
-  !Number.isInteger(minutes)||!Number.isInteger(seconds)){
-   alert("Enter a valid mile time.");
-   return;
-  }
-  mileTime=minutes*60+seconds;
- } else {
-  minutes=null;
-  seconds=null;
- }
- p.entries=p.entries.filter(e=>e.date!==date);
- p.entries.push({
-  date,
-  weight,
-  minutes,
-  seconds,
-  mileTime
- });
- p.entries.sort((a,b)=>a.date.localeCompare(b.date));
- save();
- renderProfile();
- renderHome();
- document.getElementById("weight").value="";
- document.getElementById("minutes").value="";
- document.getElementById("seconds").value="";
- alert("Entry saved!");
-}
-function renderProfile(){
- let p=data.people[active];
- let entries=p.entries;
- let latest=entries[entries.length-1];
- let percent=latest?calculate(p,latest.weight):0;
- document.getElementById("percent").textContent=
- percent.toFixed(1)+"%";
- document.getElementById("progressBar").style.width=
- Math.max(0,Math.min(100,percent))+"%";
- document.getElementById("mile").textContent=latest&&latest.minutes!==null&&latest.seconds!==null?
- latest.minutes+":"+String(latest.seconds).padStart(2,"0"):"--:--";
- renderHistory(entries);
- renderChart(entries);
-}
-function renderHistory(entries){
- let el=document.getElementById("history");
- if(!entries.length){
-  el.innerHTML='<p class="small">No entries yet.</p>';
-  return;
- }
- el.innerHTML=[...entries].reverse().map(e=>`
- <div class="entry">
-  <div>
-   <strong>${e.date}</strong><br>
-   <span class="blue">${calculate(data.people[active],e.weight).toFixed(1)}% goal progress</span><br>
-   <span class="orange">Mile: ${e.minutes!==null&&e.seconds!==null?e.minutes+":"+String(e.seconds).padStart(2,"0"):"Not recorded"}</span>
-  </div>
-  <button class="secondary" onclick="deleteEntry('${e.date}')">Delete</button>
- </div>
- `).join("");
-}
-function renderChart(entries){
- if(chart)chart.destroy();
- chart=new Chart(document.getElementById("chart"),{
-  type:"line",
-  data:{
-   labels:entries.map(e=>e.date),
-   datasets:[
-    {
-     label:"Goal Progress (%)",
-     data:entries.map(e=>calculate(data.people[active],e.weight)),
-     borderColor:"#5688ff",
-     backgroundColor:"#5688ff22",
-     yAxisID:"y",
-     tension:.3
-    },
-    {
-     label:"Mile Time",
-     data:entries.map(e=>e.mileTime!==undefined&&e.mileTime!==null?e.mileTime:(e.minutes!==null&&e.seconds!==null?e.minutes*60+e.seconds:null)),
-     borderColor:"#ff9d45",
-     backgroundColor:"#ff9d4522",
-     yAxisID:"y1",
-     tension:.3,
-     spanGaps:true
-    }
-   ]
-  },
-  options:{
-   responsive:true,
-   interaction:{mode:"index",intersect:false},
-   plugins:{
-    legend:{labels:{color:"white"}}
-   },
-   scales:{
-    x:{
-     ticks:{color:"#aab5c9"},
-     title:{display:true,text:"Date",color:"white"}
-    },
-    y:{
-     position:"left",
-     ticks:{
-      color:"#5688ff",
-      callback:v=>v+"%"
-     },
-     title:{display:true,text:"Goal Percentage",color:"#5688ff"}
-    },
-    y1:{
-     position:"right",
-     ticks:{
-      color:"#ff9d45",
-      callback:v=>Math.floor(v/60)+":"+String(v%60).padStart(2,"0")
-     },
-     title:{display:true,text:"Mile Time",color:"#ff9d45"},
-     grid:{drawOnChartArea:false}
-    }
-   }
-  }
- });
-}
-function deleteEntry(date){
- if(!confirm("Delete this entry?"))return;
- data.people[active].entries=
- data.people[active].entries.filter(e=>e.date!==date);
- save();
- renderProfile();
- renderHome();
-}
-updateCountdown();
-renderHome();
-save();
+let fullscreenChart=null;
+function save(){localStorage.setItem(KEY,JSON.stringify(data));}
+function endDate(){let d=new Date(data.start+"T12:00:00");d.setMonth(d.getMonth()+9);return d;}
+function updateCountdown(){let remaining=endDate()-new Date();let days=Math.max(0,Math.ceil(remaining/86400000));document.getElementById("countdown").textContent=remaining<=0?"CHALLENGE COMPLETE":days+" DAYS";document.getElementById("endDate").textContent="Ends "+endDate().toLocaleDateString();}
+function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);}
+function calculate(p,w){if(p.startWeight===null||p.goalWeight===null||p.startWeight===p.goalWeight)return 0;return ((p.startWeight-w)/(p.startWeight-p.goalWeight))*100;}
+function renderHome(){let el=document.getElementById("people");el.innerHTML="";data.people.forEach((p,i)=>{let latest=p.entries[p.entries.length-1];let percent=latest?calculate(p,latest.weight):0;el.innerHTML+=`<div class="card"><h2>${escapeHTML(p.name)}</h2><div class="stat blue">${p.startWeight===null?"Setup needed":percent.toFixed(1)+"%"}</div><p class="small">Goal progress</p><div class="progress"><div style="width:${Math.max(0,Math.min(100,percent))}%"></div></div><button onclick="openProfile(${i})">Open Profile</button></div>`;});}
+function openProfile(i){active=i;document.getElementById("home").classList.add("hidden");document.getElementById("profile").classList.remove("hidden");let p=data.people[i];document.getElementById("personName").textContent=p.name;document.getElementById("startWeight").value=p.startWeight??"";document.getElementById("goalWeight").value=p.goalWeight??"";document.getElementById("date").value=new Date().toISOString().slice(0,10);renderProfile();}
+function home(){if(chart){chart.destroy();chart=null;}closeChartModal();document.getElementById("profile").classList.add("hidden");document.getElementById("home").classList.remove("hidden");renderHome();}
+function saveSettings(){let p=data.people[active];let start=document.getElementById("startWeight").value;let goal=document.getElementById("goalWeight").value;if(start===""||goal===""){alert("Enter both starting and goal weights.");return;}start=Number(start);goal=Number(goal);if(start<=0||goal<=0||start===goal){alert("Enter two different positive weights.");return;}p.startWeight=start;p.goalWeight=goal;save();renderProfile();renderHome();alert("Settings saved!");}
+function saveEntry(){let p=data.people[active];if(p.startWeight===null||p.goalWeight===null){alert("Set your starting and goal weights in Settings first.");return;}let date=document.getElementById("date").value;let weight=document.getElementById("weight").value;let minutes=document.getElementById("minutes").value;let seconds=document.getElementById("seconds").value;if(!date||weight===""){alert("Date and weight are required.");return;}weight=Number(weight);if(weight<=0){alert("Enter a valid weight.");return;}let hasMinutes=minutes!=="";let hasSeconds=seconds!=="";let mileTime=null;if(hasMinutes||hasSeconds){if(!hasMinutes||!hasSeconds){alert("Enter both mile minutes and mile seconds, or leave both blank.");return;}minutes=Number(minutes);seconds=Number(seconds);if(minutes<0||seconds<0||seconds>59||!Number.isInteger(minutes)||!Number.isInteger(seconds)){alert("Enter a valid mile time.");return;}mileTime=minutes*60+seconds;}else{minutes=null;seconds=null;}p.entries=p.entries.filter(e=>e.date!==date);p.entries.push({date,weight,minutes,seconds,mileTime});p.entries.sort((a,b)=>a.date.localeCompare(b.date));save();renderProfile();renderHome();document.getElementById("weight").value="";document.getElementById("minutes").value="";document.getElementById("seconds").value="";alert("Entry saved!");}
+function renderProfile(){let p=data.people[active];let entries=p.entries;let latest=entries[entries.length-1];let percent=latest?calculate(p,latest.weight):0;document.getElementById("percent").textContent=percent.toFixed(1)+"%";document.getElementById("progressBar").style.width=Math.max(0,Math.min(100,percent))+"%";document.getElementById("mile").textContent=latest&&latest.minutes!==null&&latest.seconds!==null?latest.minutes+":"+String(latest.seconds).padStart(2,"0"):"--:--";renderHistory(entries);renderChart(entries);}
+function renderHistory(entries){let el=document.getElementById("history");if(!entries.length){el.innerHTML='<p class="small">No entries yet.</p>';return;}el.innerHTML=[...entries].reverse().map(e=>`<div class="entry"><div><strong>${e.date}</strong><br><span class="blue">${calculate(data.people[active],e.weight).toFixed(1)}% goal progress</span><br><span class="orange">Mile: ${e.minutes!==null&&e.seconds!==null?e.minutes+":"+String(e.seconds).padStart(2,"0"):"Not recorded"}</span></div><button class="secondary" onclick="deleteEntry('${e.date}')">Delete</button></div>`).join("");}
+function chartConfig(entries,full=false){return{type:"line",data:{labels:entries.map(e=>e.date),datasets:[{label:"Goal Progress (%)",data:entries.map(e=>calculate(data.people[active],e.weight)),borderColor:"#5688ff",backgroundColor:"#5688ff33",fill:true,pointRadius:full?3:2,pointHoverRadius:5,borderWidth:2,yAxisID:"y",tension:.3},{label:"Mile Time",data:entries.map(e=>e.mileTime!==undefined&&e.mileTime!==null?e.mileTime:(e.minutes!==null&&e.seconds!==null?e.minutes*60+e.seconds:null)),borderColor:"#ff9d45",backgroundColor:"#ff9d4533",fill:false,pointRadius:full?3:2,pointHoverRadius:5,borderWidth:2,yAxisID:"y1",tension:.3,spanGaps:true}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{color:"white",usePointStyle:true,boxWidth:8,padding:16}},tooltip:{backgroundColor:"#101722",titleColor:"#dbe5f5",bodyColor:"#dbe5f5",padding:10}} ,scales:{x:{ticks:{color:"#aab5c9",maxTicksLimit:full?12:7,maxRotation:0},grid:{color:"#ffffff0b"},title:{display:true,text:"Date",color:"#8995a9"}},y:{position:"left",beginAtZero:true,ticks:{color:"#5688ff",callback:v=>v+"%",padding:8},title:{display:true,text:"Goal Percentage",color:"#5688ff"},grid:{color:"#ffffff0b"}},y1:{position:"right",ticks:{color:"#ff9d45",callback:v=>Math.floor(v/60)+":"+String(v%60).padStart(2,"0")},title:{display:true,text:"Mile Time",color:"#ff9d45"},grid:{drawOnChartArea:false}}}}};}
+function renderChart(entries){if(chart)chart.destroy();chart=new Chart(document.getElementById("chart"),chartConfig(entries,false));}
+function openChartModal(){let entries=data.people[active].entries;let modal=document.getElementById("chartModal");modal.hidden=false;document.getElementById("modalTitle").textContent=data.people[active].name+" — Progress Graph";document.body.style.overflow="hidden";if(fullscreenChart)fullscreenChart.destroy();fullscreenChart=new Chart(document.getElementById("fullscreenChart"),chartConfig(entries,true));document.getElementById("closeChart").focus();}
+function closeChartModal(){let modal=document.getElementById("chartModal");if(modal.hidden)return;modal.hidden=true;document.body.style.overflow="";if(fullscreenChart){fullscreenChart.destroy();fullscreenChart=null;}document.getElementById("expandChart").focus();}
+function deleteEntry(date){if(!confirm("Delete this entry?"))return;data.people[active].entries=data.people[active].entries.filter(e=>e.date!==date);save();renderProfile();renderHome();}
+document.getElementById("expandChart").addEventListener("click",openChartModal);
+document.getElementById("closeChart").addEventListener("click",closeChartModal);
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeChartModal();});
+updateCountdown();renderHome();save();
 </script>
 </body>
 </html>
